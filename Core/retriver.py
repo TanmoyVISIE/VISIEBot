@@ -3,6 +3,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.schema import Document
 from typing import List, Optional
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def get_visie_retriever(collection_name: str, top_k: int = 3):
     """
@@ -21,15 +25,52 @@ def get_visie_retriever(collection_name: str, top_k: int = 3):
     if collection_name not in valid_collections:
         raise ValueError(f"Invalid collection name: {collection_name}. Must be one of: {valid_collections}")
     
-    # Initialize embeddings model
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+    # Get Google API key from environment
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    if not google_api_key:
+        raise ValueError("GOOGLE_API_KEY environment variable not set")
+    
+    # Initialize embeddings model with API key
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001",
+        google_api_key=google_api_key
+    )
 
-    # Connect to the existing Chroma collection
-    db_path = f"DataLoader/chroma_db/Visieinfo - {collection_name}"
-
-    # Check if database path exists
-    if not os.path.exists(db_path):
-        raise FileNotFoundError(f"Database path does not exist: {db_path}")
+    # Try different possible database paths
+    possible_paths = [
+        f"DataLoader/chroma_db/Visieinfo - {collection_name}",
+        f"DataLoader/chroma_db/VisieInfo - {collection_name}",
+        f"DataLoader/chroma_db/chroma_VisieInfo - {collection_name}",
+        f"DataLoader/chroma_db/chroma_{collection_name}",
+        f"DataLoader/chroma_db/{collection_name}",
+        f"DataLoader/Chroma_db/Visieinfo - {collection_name}",
+        f"DataLoader/Chroma_db/VisieInfo - {collection_name}",
+    ]
+    
+    db_path = None
+    for path in possible_paths:
+        if os.path.exists(path):
+            db_path = path
+            print(f"Found database at: {db_path}")
+            break
+    
+    if not db_path:
+        # List what's actually in the DataLoader directory for debugging
+        if os.path.exists("DataLoader/"):
+            print("Contents of DataLoader/:")
+            for item in os.listdir("DataLoader/"):
+                print(f"  {item}")
+                if os.path.isdir(f"DataLoader/{item}"):
+                    try:
+                        sub_items = os.listdir(f"DataLoader/{item}")
+                        for sub_item in sub_items[:5]:  # Show first 5 items
+                            print(f"    {sub_item}")
+                        if len(sub_items) > 5:
+                            print(f"    ... and {len(sub_items) - 5} more items")
+                    except:
+                        pass
+        
+        raise FileNotFoundError(f"Database path for collection '{collection_name}' not found. Tried paths: {possible_paths}")
     
     vectorstore = Chroma(
         collection_name=collection_name.replace(" ", "_"), 
@@ -103,8 +144,16 @@ def get_employees_retriever(top_k: int = 3):
     Returns:
         A retriever object that can perform similarity search on the employees information collection.
     """
-    # Initialize embeddings model
-    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+    # Get Google API key from environment
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    if not google_api_key:
+        raise ValueError("GOOGLE_API_KEY environment variable not set")
+    
+    # Initialize embeddings model with API key
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001",
+        google_api_key=google_api_key
+    )
 
     # Connect to the existing Chroma collection - corrected path
     db_path = "DataLoader/Chroma_db/VisieEmployee/"
