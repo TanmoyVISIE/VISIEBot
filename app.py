@@ -254,19 +254,6 @@ async def chat_endpoint(chat_request: ChatRequest):
         status="success"
     )
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": "VISIE RAG Chatbot"}
-
-@app.post("/clear-history")
-async def clear_history():
-    """Clear chat history."""
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "w") as file:
-            file.write("")
-    return {"status": "success", "message": "History cleared"}
-
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
