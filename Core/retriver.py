@@ -72,11 +72,25 @@ def get_visie_retriever(collection_name: str, top_k: int = 3):
         
         raise FileNotFoundError(f"Database path for collection '{collection_name}' not found. Tried paths: {possible_paths}")
     
-    vectorstore = Chroma(
-        collection_name=collection_name.replace(" ", "_"), 
-        embedding_function=embeddings,
-        persist_directory=db_path
-    )
+    try:
+        vectorstore = Chroma(
+            collection_name=collection_name.replace(" ", "_"), 
+            embedding_function=embeddings,
+            persist_directory=db_path
+        )
+        
+        # Test the connection and get count
+        try:
+            count = vectorstore._collection.count()
+            print(f"Successfully connected to collection '{collection_name}' with {count} documents")
+        except Exception as e:
+            print(f"Warning: Could not get document count: {e}")
+        
+    except Exception as e:
+        print(f"Error connecting to vectorstore at {db_path}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
     
     # Create retriever with similarity search
     retriever = vectorstore.as_retriever(

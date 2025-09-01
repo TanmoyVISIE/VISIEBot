@@ -1,6 +1,5 @@
-from langchain_core.tools import Tool
-# Fixed import path to match your actual file structure
-from Core.retriver import get_visie_retriever
+from langchain_core.tools import Tool, tool
+from Core.retriver import get_visie_retriever, search_visie_info
 from langchain.schema import Document
 from typing import List, Optional
 import logging
@@ -108,6 +107,57 @@ def search_visie_info_wrapper(input_str: str) -> str:
     except Exception as e:
         logging.error(f"Error in search_visie_info_wrapper: {e}", exc_info=True)
         return f"Error occurred while searching: {str(e)}"
+
+@tool
+def visie_info_tool(query: str, variety_type: Optional[str] = None) -> str:
+    """
+    Get information about VISIE.tech projects, products, and services.
+    
+    Args:
+        query: The user's question about VISIE
+        variety_type: Optional specific category to search in
+    
+    Returns:
+        Information about VISIE based on the query
+    """
+    try:
+        print(f"DEBUG: visie_info_tool called with query: {query}")
+        
+        # Try to import and use the actual retriever
+        from Core.retriver import search_visie_info
+        results = search_visie_info(query, variety_type, top_k=3)
+        
+        print(f"DEBUG: Retrieved {len(results)} results from database")
+        
+        if results:
+            response_parts = []
+            for i, doc in enumerate(results[:3]):  # Limit to top 3 results
+                content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
+                source = doc.metadata.get('source_collection', 'VISIE Info') if hasattr(doc, 'metadata') else 'VISIE Info'
+                
+                # Clean and format the content
+                clean_content = content.strip()[:500]  # Limit to 500 chars
+                response_parts.append(f"**From {source}:**\n{clean_content}")
+                
+                print(f"DEBUG: Document {i+1} from {source}: {clean_content[:100]}...")
+            
+            final_response = "\n\n".join(response_parts)
+            print(f"DEBUG: Final response length: {len(final_response)}")
+            return final_response
+        else:
+            fallback_response = f"I searched for information about '{query}' in VISIE's knowledge base. While I couldn't find specific details in our database, I can tell you that VISIE is an innovative AI technology company offering:\n\n• **Documind**: AI-powered document processing and analysis\n• **Kothok**: Advanced conversational AI and chatbot solutions\n• **Percept**: Computer vision and image recognition technology\n• **VerifyID**: Identity verification and authentication systems\n• **AI Solutions for Innovation**: Custom AI solutions for businesses\n\nCould you please be more specific about what aspect of VISIE you'd like to know about?"
+            
+            print("DEBUG: No results found, returning fallback response")
+            return fallback_response
+            
+    except Exception as e:
+        print(f"ERROR in visie_info_tool: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        error_response = f"I'm here to help with information about VISIE AI! You asked about: {query}\n\nVISIE is a leading AI technology company offering cutting-edge solutions including:\n\n• **Document Processing**: Intelligent document analysis and automation\n• **Conversational AI**: Advanced chatbot and virtual assistant platforms\n• **Computer Vision**: Image recognition and visual AI technology\n• **Identity Verification**: Secure authentication and verification systems\n• **Custom AI Solutions**: Tailored AI implementations for businesses\n\nWhat specific aspect of VISIE would you like to know more about?"
+        
+        return error_response
 
 visie_info_tool = Tool(
     name="visie_info_tool",

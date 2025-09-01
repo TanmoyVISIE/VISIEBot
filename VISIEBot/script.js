@@ -42,9 +42,9 @@ $(document).ready(function () {
         // Clear input
         $('#user-input').val("");
 
-        // Send to backend via AJAX
+        // Send to backend via AJAX - Fixed endpoint URL
         $.ajax({
-            url: "/get",
+            url: "/chat",  // Changed from "/get" to "/chat"
             type: "POST",
             contentType: "application/json",
             data: JSON.stringify({ message: userInput }),
@@ -59,7 +59,7 @@ $(document).ready(function () {
                 } else {
                     let errorMessage = `
                         <div class="chat-box-body-receive">
-                            <p>Sorry, I couldn’t process your request. Please try again.</p>
+                            <p>Sorry, I couldn't process your request. Please try again.</p>
                             <span>${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>`;
                     $('.chat-box-body').append(errorMessage);
@@ -67,8 +67,10 @@ $(document).ready(function () {
                 // Auto-scroll to bottom
                 $('.chat-box-body').scrollTop($('.chat-box-body')[0].scrollHeight);
             },
-            error: function (error) {
+            error: function (xhr, status, error) {
                 console.error("Error:", error);
+                console.error("Status:", status);
+                console.error("Response:", xhr.responseText);
                 let errorMessage = `
                     <div class="chat-box-body-receive">
                         <p>Sorry, there was an error. Please try again later.</p>

@@ -9,7 +9,7 @@ langchain==0.2.16
 langchain-core==0.2.38
 langchain-community==0.2.16
 langgraph==0.2.0
-langchain-google-genai==1.0.10
+langchain-google-genai==1.0.8
 
 # Hugging Face integration for LangChain
 langchain-huggingface==0.0.3

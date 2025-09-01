@@ -1,8 +1,4 @@
 import traceback
-import json
-import io
-import base64
-import uuid
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
@@ -73,19 +69,6 @@ if google_api_key:
 # Second try: Gemini Pro
 if not llm and google_api_key:
     try:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-pro",
-            temperature=0.3,
-            google_api_key=google_api_key,
-            convert_system_message_to_human=True
-        )
-        print("Successfully initialized Google Gemini Pro model as fallback")
-    except Exception as e:
-        print(f"Error initializing Gemini Pro model: {e}")
-
-# Third try: Microsoft DialoGPT from Hugging Face
-if not llm:
-    try:
         print("Attempting to initialize Microsoft DialoGPT model...")
 
         # Initialize tokenizer and model with better error handling
@@ -129,7 +112,7 @@ if not llm:
 
     except Exception as e:
         print(f"Error initializing DialoGPT model: {e}")
-        # Try a smaller, simpler model as last resort
+        # simpler model as last resort
         try:
             print("Trying DistilGPT2 as fallback...")
             smaller_pipe = pipeline(
@@ -174,13 +157,36 @@ def write_previous_history(messages):
         file.write(message_str + "\n")
 
 
-# Define the prompt template for the main agent interaction
-agent_prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", SYSTEM),
-        ("placeholder", "{messages}"),
-    ]
-)
+# Define the prompt template for the main agent interaction with error handling
+def create_agent_prompt():
+    try:
+        # Try to create prompt with original SYSTEM
+        test_prompt = ChatPromptTemplate.from_messages([
+            ("system", SYSTEM),
+            ("placeholder", "{messages}"),
+        ])
+        # Test if it needs context by checking the input variables
+        if 'context' in test_prompt.input_variables:
+            print("DEBUG: Original prompt requires context, providing it...")
+            # Create a version that provides context
+            def format_with_context(input_data):
+                return {
+                    "messages": input_data["messages"],
+                    "context": ""
+                }
+            return RunnableLambda(format_with_context) | test_prompt
+        else:
+            print("DEBUG: Using original prompt without context")
+            return test_prompt
+    except Exception as e:
+        print(f"DEBUG: Error with original prompt, using simple fallback: {e}")
+        # Fallback to simple prompt
+        return ChatPromptTemplate.from_messages([
+            ("system", SIMPLE_SYSTEM),
+            ("placeholder", "{messages}"),
+        ])
+
+agent_prompt = create_agent_prompt()
 
 # Tools setup
 tools = [
@@ -192,6 +198,19 @@ tools = [
 llm_with_tools = llm.bind_tools(tools)
 agent_chain = agent_prompt | llm_with_tools
 
+# Create a wrapper function to handle context
+def create_agent_with_context():
+    def format_with_context(input_data):
+        # Provide empty context initially - tools will provide context when needed
+        return {
+            "messages": input_data["messages"],
+            "context": ""  # Add empty context to satisfy the prompt template
+        }
+    
+    return RunnableLambda(format_with_context) | agent_prompt | llm_with_tools
+
+agent_chain = create_agent_with_context()
+
 # Define the agent state
 
 
@@ -200,9 +219,22 @@ class AgentState(TypedDict):
 
 
 def assistant(state: AgentState):
-    response = agent_chain.invoke({"messages": state["messages"]})
-    return {"messages": [response]}
-
+    try:
+        response = agent_chain.invoke({"messages": state["messages"]})
+        return {"messages": [response]}
+    except Exception as e:
+        if "context" in str(e).lower():
+            print("DEBUG: Context error in assistant, creating emergency fallback")
+            # Emergency fallback
+            emergency_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful AI assistant. Answer the user's questions about VISIE AI."),
+                ("placeholder", "{messages}"),
+            ])
+            emergency_chain = emergency_prompt | llm_with_tools
+            response = emergency_chain.invoke({"messages": state["messages"]})
+            return {"messages": [response]}
+        else:
+            raise e
 
 # Build the graph
 builder = StateGraph(AgentState)
