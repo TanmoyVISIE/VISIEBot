@@ -37,34 +37,27 @@ def search_visie_info(query: str, collection_type: Optional[str] = None, top_k: 
             return []
             
         # Search in specific collection
-        try:
-            logging.info(f"Getting retriever for collection: {collection_type}")
-            retriever = get_visie_retriever(collection_type, top_k)
-            logging.info(f"Retriever obtained. Searching documents for query: '{query}'")
-            results = retriever.get_relevant_documents(query)
-            logging.info(f"Retrieved {len(results)} documents for '{query}' in '{collection_type}'.")
-        except Exception as e:
-            logging.error(f"Error during retrieval from collection '{collection_type}': {e}", exc_info=True)
-            results = [] 
+        logging.info(f"Getting retriever for collection: {collection_type}")
+        retriever = get_visie_retriever(collection_type, top_k)
+        logging.info(f"Retriever obtained. Searching documents for query: '{query}'")
+        results = retriever.get_relevant_documents(query)
+        logging.info(f"Retrieved {len(results)} documents for '{query}' in '{collection_type}'.")
     else:
         # Search in all collections
         logging.info("No collection_type specified, searching all collections.")
         for visie_type in valid_collections:
-            try:
-                logging.info(f"Getting retriever for collection: {visie_type}")
-                retriever = get_visie_retriever(visie_type, top_k)
-                logging.info(f"Retriever obtained. Searching documents for query: '{query}' in {visie_type}")
-                retrieved_docs = retriever.get_relevant_documents(query)
-                # Add collection info to metadata
-                for doc in retrieved_docs:
-                    if hasattr(doc, 'metadata'):
-                        doc.metadata['source_collection'] = visie_type
-                    else:
-                        doc.metadata = {'source_collection': visie_type}
-                results.extend(retrieved_docs)
-                logging.info(f"Retrieved {len(retrieved_docs)} documents for '{query}' in '{visie_type}'.")
-            except Exception as e:
-                logging.error(f"Error during retrieval from collection '{visie_type}': {e}", exc_info=True)
+            logging.info(f"Getting retriever for collection: {visie_type}")
+            retriever = get_visie_retriever(visie_type, top_k)
+            logging.info(f"Retriever obtained. Searching documents for query: '{query}' in {visie_type}")
+            retrieved_docs = retriever.get_relevant_documents(query)
+            # Add collection info to metadata
+            for doc in retrieved_docs:
+                if hasattr(doc, 'metadata'):
+                    doc.metadata['source_collection'] = visie_type
+                else:
+                    doc.metadata = {'source_collection': visie_type}
+            results.extend(retrieved_docs)
+            logging.info(f"Retrieved {len(retrieved_docs)} documents for '{query}' in '{visie_type}'.")
 
     logging.info(f"Total documents found across all searches: {len(results)}")
     return results
@@ -79,34 +72,29 @@ def search_visie_info_wrapper(input_str: str) -> str:
     Returns:
         str: Formatted search results
     """
-    try:
-        # Parse input - check if collection type is specified
-        if "|" in input_str:
-            query, collection_type = input_str.split("|", 1)
-            query = query.strip()
-            collection_type = collection_type.strip() if collection_type.strip() else None
-        else:
-            query = input_str.strip()
-            collection_type = None
-        
-        # Perform search
-        results = search_visie_info(query, collection_type)
-        
-        if not results:
-            return f"No information found for query: '{query}'"
-        
-        # Format results for output
-        formatted_results = []
-        for i, doc in enumerate(results[:5], 1):  # Limit to top 5 results
-            content = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
-            source_collection = doc.metadata.get('source_collection', 'Unknown') if hasattr(doc, 'metadata') else 'Unknown'
-            formatted_results.append(f"{i}. [{source_collection}] {content}")
-        
-        return f"Found {len(results)} results for '{query}':\n\n" + "\n\n".join(formatted_results)
-        
-    except Exception as e:
-        logging.error(f"Error in search_visie_info_wrapper: {e}", exc_info=True)
-        return f"Error occurred while searching: {str(e)}"
+    # Parse input - check if collection type is specified
+    if "|" in input_str:
+        query, collection_type = input_str.split("|", 1)
+        query = query.strip()
+        collection_type = collection_type.strip() if collection_type.strip() else None
+    else:
+        query = input_str.strip()
+        collection_type = None
+    
+    # Perform search
+    results = search_visie_info(query, collection_type)
+    
+    if not results:
+        return f"No information found for query: '{query}'"
+    
+    # Format results for output
+    formatted_results = []
+    for i, doc in enumerate(results[:5], 1):  # Limit to top 5 results
+        content = doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content
+        source_collection = doc.metadata.get('source_collection', 'Unknown') if hasattr(doc, 'metadata') else 'Unknown'
+        formatted_results.append(f"{i}. [{source_collection}] {content}")
+    
+    return f"Found {len(results)} results for '{query}':\n\n" + "\n\n".join(formatted_results)
 
 @tool
 def visie_info_tool(query: str, variety_type: Optional[str] = None) -> str:
@@ -120,44 +108,34 @@ def visie_info_tool(query: str, variety_type: Optional[str] = None) -> str:
     Returns:
         Information about VISIE based on the query
     """
-    try:
-        print(f"DEBUG: visie_info_tool called with query: {query}")
-        
-        # Try to import and use the actual retriever
-        from Core.retriver import search_visie_info
-        results = search_visie_info(query, variety_type, top_k=3)
-        
-        print(f"DEBUG: Retrieved {len(results)} results from database")
-        
-        if results:
-            response_parts = []
-            for i, doc in enumerate(results[:3]):  # Limit to top 3 results
-                content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
-                source = doc.metadata.get('source_collection', 'VISIE Info') if hasattr(doc, 'metadata') else 'VISIE Info'
-                
-                # Clean and format the content
-                clean_content = content.strip()[:500]  # Limit to 500 chars
-                response_parts.append(f"**From {source}:**\n{clean_content}")
-                
-                print(f"DEBUG: Document {i+1} from {source}: {clean_content[:100]}...")
+    print(f"DEBUG: visie_info_tool called with query: {query}")
+    
+    # Import and use the actual retriever
+    from Core.retriver import search_visie_info
+    results = search_visie_info(query, variety_type, top_k=3)
+    
+    print(f"DEBUG: Retrieved {len(results)} results from database")
+    
+    if results:
+        response_parts = []
+        for i, doc in enumerate(results[:3]):  # Limit to top 3 results
+            content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
+            source = doc.metadata.get('source_collection', 'VISIE Info') if hasattr(doc, 'metadata') else 'VISIE Info'
             
-            final_response = "\n\n".join(response_parts)
-            print(f"DEBUG: Final response length: {len(final_response)}")
-            return final_response
-        else:
-            fallback_response = f"I searched for information about '{query}' in VISIE's knowledge base. While I couldn't find specific details in our database, I can tell you that VISIE is an innovative AI technology company offering:\n\n• **Documind**: AI-powered document processing and analysis\n• **Kothok**: Advanced conversational AI and chatbot solutions\n• **Percept**: Computer vision and image recognition technology\n• **VerifyID**: Identity verification and authentication systems\n• **AI Solutions for Innovation**: Custom AI solutions for businesses\n\nCould you please be more specific about what aspect of VISIE you'd like to know about?"
+            # Clean and format the content
+            clean_content = content.strip()[:500]  # Limit to 500 chars
+            response_parts.append(f"**From {source}:**\n{clean_content}")
             
-            print("DEBUG: No results found, returning fallback response")
-            return fallback_response
-            
-    except Exception as e:
-        print(f"ERROR in visie_info_tool: {e}")
-        import traceback
-        traceback.print_exc()
+            print(f"DEBUG: Document {i+1} from {source}: {clean_content[:100]}...")
         
-        error_response = f"I'm here to help with information about VISIE AI! You asked about: {query}\n\nVISIE is a leading AI technology company offering cutting-edge solutions including:\n\n• **Document Processing**: Intelligent document analysis and automation\n• **Conversational AI**: Advanced chatbot and virtual assistant platforms\n• **Computer Vision**: Image recognition and visual AI technology\n• **Identity Verification**: Secure authentication and verification systems\n• **Custom AI Solutions**: Tailored AI implementations for businesses\n\nWhat specific aspect of VISIE would you like to know more about?"
+        final_response = "\n\n".join(response_parts)
+        print(f"DEBUG: Final response length: {len(final_response)}")
+        return final_response
+    else:
+        fallback_response = f"I searched for information about '{query}' in VISIE's knowledge base. While I couldn't find specific details in our database, I can tell you that VISIE is an innovative AI technology company offering:\n\n• **Documind**: AI-powered document processing and analysis\n• **Kothok**: Advanced conversational AI and chatbot solutions\n• **Percept**: Computer vision and image recognition technology\n• **VerifyID**: Identity verification and authentication systems\n• **AI Solutions for Innovation**: Custom AI solutions for businesses\n\nCould you please be more specific about what aspect of VISIE you'd like to know about?"
         
-        return error_response
+        print("DEBUG: No results found, returning fallback response")
+        return fallback_response
 
 visie_info_tool = Tool(
     name="visie_info_tool",
