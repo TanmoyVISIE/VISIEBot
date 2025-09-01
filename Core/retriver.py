@@ -36,17 +36,15 @@ def get_visie_retriever(collection_name: str, top_k: int = 3):
         google_api_key=google_api_key
     )
 
-    # Try different possible database paths
+    # Define possible database paths
     possible_paths = [
         f"DataLoader/chroma_db/Visieinfo - {collection_name}",
-        f"DataLoader/chroma_db/VisieInfo - {collection_name}",
         f"DataLoader/chroma_db/chroma_VisieInfo - {collection_name}",
         f"DataLoader/chroma_db/chroma_{collection_name}",
         f"DataLoader/chroma_db/{collection_name}",
-        f"DataLoader/Chroma_db/Visieinfo - {collection_name}",
-        f"DataLoader/Chroma_db/VisieInfo - {collection_name}",
     ]
     
+    # Find existing database path
     db_path = None
     for path in possible_paths:
         if os.path.exists(path):
@@ -55,42 +53,29 @@ def get_visie_retriever(collection_name: str, top_k: int = 3):
             break
     
     if not db_path:
-        # List what's actually in the DataLoader directory for debugging
+        # List directory contents for debugging
         if os.path.exists("DataLoader/"):
             print("Contents of DataLoader/:")
             for item in os.listdir("DataLoader/"):
                 print(f"  {item}")
                 if os.path.isdir(f"DataLoader/{item}"):
-                    try:
-                        sub_items = os.listdir(f"DataLoader/{item}")
-                        for sub_item in sub_items[:5]:  # Show first 5 items
-                            print(f"    {sub_item}")
-                        if len(sub_items) > 5:
-                            print(f"    ... and {len(sub_items) - 5} more items")
-                    except:
-                        pass
+                    sub_items = os.listdir(f"DataLoader/{item}")
+                    for sub_item in sub_items[:5]:  # Show first 5 items
+                        print(f"    {sub_item}")
+                    if len(sub_items) > 5:
+                        print(f"    ... and {len(sub_items) - 5} more items")
         
         raise FileNotFoundError(f"Database path for collection '{collection_name}' not found. Tried paths: {possible_paths}")
     
-    try:
-        vectorstore = Chroma(
-            collection_name=collection_name.replace(" ", "_"), 
-            embedding_function=embeddings,
-            persist_directory=db_path
-        )
-        
-        # Test the connection and get count
-        try:
-            count = vectorstore._collection.count()
-            print(f"Successfully connected to collection '{collection_name}' with {count} documents")
-        except Exception as e:
-            print(f"Warning: Could not get document count: {e}")
-        
-    except Exception as e:
-        print(f"Error connecting to vectorstore at {db_path}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    vectorstore = Chroma(
+        collection_name=collection_name.replace(" ", "_"), 
+        embedding_function=embeddings,
+        persist_directory=db_path
+    )
+    
+    # Get document count
+    count = vectorstore._collection.count()
+    print(f"Successfully connected to collection '{collection_name}' with {count} documents")
     
     # Create retriever with similarity search
     retriever = vectorstore.as_retriever(
@@ -122,28 +107,20 @@ def search_visie_info(query: str, variety_type: Optional[str] = None, top_k: int
     
     if variety_type:
         # Search in specific collection
-        try:
-            retriever = get_visie_retriever(variety_type, top_k)
-            results = retriever.get_relevant_documents(query)
-        except Exception as e:
-            print(f"Error searching in collection {variety_type}: {e}")
-            return []
+        retriever = get_visie_retriever(variety_type, top_k)
+        results = retriever.get_relevant_documents(query)
     else:
         # Search in all collections
         for collection in collections:
-            try:
-                retriever = get_visie_retriever(collection, top_k)
-                collection_results = retriever.get_relevant_documents(query)
-                # Add collection info to metadata
-                for doc in collection_results:
-                    if hasattr(doc, 'metadata'):
-                        doc.metadata['source_collection'] = collection
-                    else:
-                        doc.metadata = {'source_collection': collection}
-                results.extend(collection_results)
-            except Exception as e:
-                print(f"Error searching in collection {collection}: {e}")
-                continue
+            retriever = get_visie_retriever(collection, top_k)
+            collection_results = retriever.get_relevant_documents(query)
+            # Add collection info to metadata
+            for doc in collection_results:
+                if hasattr(doc, 'metadata'):
+                    doc.metadata['source_collection'] = collection
+                else:
+                    doc.metadata = {'source_collection': collection}
+            results.extend(collection_results)
     
     return results
 
@@ -169,7 +146,7 @@ def get_employees_retriever(top_k: int = 3):
         google_api_key=google_api_key
     )
 
-    # Connect to the existing Chroma collection - corrected path
+    # Connect to the existing Chroma collection
     db_path = "DataLoader/Chroma_db/VisieEmployee/"
     
     # Check if database path exists
@@ -204,24 +181,20 @@ def search_employees_info(query: str, top_k: int = 3) -> List[Document]:
     if not query.strip():
         raise ValueError("Query cannot be empty")
     
-    try:
-        # Get the employees retriever - fixed function name
-        retriever = get_employees_retriever(top_k)
+    # Get the employees retriever
+    retriever = get_employees_retriever(top_k)
 
-        # Get relevant documents
-        results = retriever.get_relevant_documents(query)
+    # Get relevant documents
+    results = retriever.get_relevant_documents(query)
 
-        # Add source information to metadata
-        for doc in results:
-            if hasattr(doc, 'metadata'):
-                doc.metadata['source_collection'] = 'employees_info'
-            else:
-                doc.metadata = {'source_collection': 'employees_info'}
+    # Add source information to metadata
+    for doc in results:
+        if hasattr(doc, 'metadata'):
+            doc.metadata['source_collection'] = 'employees_info'
+        else:
+            doc.metadata = [{'source_collection': 'employees_info'}]
 
-        return results
+    return results
+        
     
-    except Exception as e:
-        print(f"Error searching employee information: {e}")
-        return []
-
 
