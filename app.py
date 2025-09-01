@@ -60,7 +60,6 @@ if google_api_key:
             model="gemini-1.5-flash",
             temperature=0.3,
             google_api_key=google_api_key
-            # Removed: convert_system_message_to_human=True (deprecated)
         )
         print("Successfully initialized Google Gemini 1.5 Flash model")
     except Exception as e:
