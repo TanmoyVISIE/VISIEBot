@@ -192,9 +192,9 @@ def search_employees_info(query: str, top_k: int = 3) -> List[Document]:
         if hasattr(doc, 'metadata'):
             doc.metadata['source_collection'] = 'employees_info'
         else:
-            doc.metadata = [{'source_collection': 'employees_info'}]
+            doc.metadata = {'source_collection': 'employees_info'}
 
     return results
-        
-    
+
+
 

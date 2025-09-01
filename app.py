@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableLambda
 from Core.prompt import SYSTEM
 from Tools.search_tool import search
 from Tools.search_visie_info import visie_info_tool
+from Tools.search_employee_info import visie_employee_tool
 from langgraph.graph import START, END, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
@@ -121,50 +122,23 @@ def write_previous_history(messages):
         file.write(message_str + "\n")
 
 # Define simple system prompt as fallback
-SIMPLE_SYSTEM = "You are VISIEBot, an AI assistant that helps users learn about VISIE AI, its products, services, and solutions. Use the available tools when users ask about VISIE-related topics."
 
 # Define the prompt template for the main agent interaction
-def create_agent_prompt():
-    test_prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM),
-        ("placeholder", "{messages}"),
-    ])
-    
-    # Check if it needs context
-    if 'context' in test_prompt.input_variables:
-        print("DEBUG: Original prompt requires context, providing it...")
-        def format_with_context(input_data):
-            return {
-                "messages": input_data["messages"],
-                "context": ""
-            }
-        return RunnableLambda(format_with_context) | test_prompt
-    else:
-        print("DEBUG: Using original prompt without context")
-        return test_prompt
-
-agent_prompt = create_agent_prompt()
+agent_prompt = ChatPromptTemplate.from_messages([
+    ("system", SYSTEM),
+    ("placeholder", "{messages}"),
+])
 
 # Tools setup
 tools = [
     visie_info_tool,
+    visie_employee_tool,
     search
 ]
 
 # Bind tools to the LLM
 llm_with_tools = llm.bind_tools(tools)
-
-# Create agent chain with context handling
-def create_agent_with_context():
-    def format_with_context(input_data):
-        return {
-            "messages": input_data["messages"],
-            "context": ""
-        }
-    
-    return RunnableLambda(format_with_context) | agent_prompt | llm_with_tools
-
-agent_chain = create_agent_with_context()
+agent_chain = agent_prompt | llm_with_tools
 
 # Define the agent state
 class AgentState(TypedDict):
