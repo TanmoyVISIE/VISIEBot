@@ -40,7 +40,7 @@ app.add_middleware(
 )
 
 # Mount static files and templates
-app.mount("/static", StaticFiles(directory="VISIEBot"), name="static")
+app.mount("/VISIEBot", StaticFiles(directory="VISIEBot"), name="static")
 templates = Jinja2Templates(directory="VISIEBot")
 
 # Get API keys from environment variables
