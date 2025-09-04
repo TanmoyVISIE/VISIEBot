@@ -22,6 +22,7 @@ from langgraph.graph.message import add_messages
 import os
 from typing import Optional, TypedDict, Annotated
 from dotenv import load_dotenv
+from User.user_history import history_manager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -64,9 +65,9 @@ if google_api_key:
 # Second fallback: DialoGPT
 if not llm:
     print("Attempting to initialize Microsoft DialoGPT model...")
-    
+
     model_name = "microsoft/DialoGPT-medium"
-    
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
         token=hf_token if hf_token else None,
@@ -99,30 +100,6 @@ if not llm:
     llm = HuggingFacePipeline(pipeline=pipe)
     print("Successfully initialized Microsoft DialoGPT model")
 
-# History management
-HISTORY_FILE = "history.txt"
-if os.path.exists(HISTORY_FILE):
-    with open(HISTORY_FILE, "w") as file:
-        file.write("")
-
-def read_previous_history():
-    """Read the previous_response_id from the history file."""
-    if os.path.exists(HISTORY_FILE):
-        with open(HISTORY_FILE, "r", encoding="utf-8") as file:
-            return file.read().strip()
-    return None
-
-def write_previous_history(messages):
-    """Append the messages to the history file."""
-    with open(HISTORY_FILE, "a", encoding="utf-8") as file:
-        if isinstance(messages, list):
-            message_str = str(messages)
-        else:
-            message_str = str(messages)
-        file.write(message_str + "\n")
-
-# Define simple system prompt as fallback
-
 # Define the prompt template for the main agent interaction
 agent_prompt = ChatPromptTemplate.from_messages([
     ("system", SYSTEM),
@@ -141,12 +118,16 @@ llm_with_tools = llm.bind_tools(tools)
 agent_chain = agent_prompt | llm_with_tools
 
 # Define the agent state
+
+
 class AgentState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
+
 
 def assistant(state: AgentState):
     response = agent_chain.invoke({"messages": state["messages"]})
     return {"messages": [response]}
+
 
 # Build the graph
 builder = StateGraph(AgentState)
@@ -164,14 +145,25 @@ builder.add_conditional_edges(
 builder.add_edge("tools", "assistant")
 alfred = builder.compile()
 
-def get_final_response(messages):
+
+def get_final_response(messages, session_id: str):
     """Extract the final response from the list of messages."""
-    print(f"DEBUG: Processing message: {[m.content if hasattr(m, 'content') else str(m) for m in messages]}")
-    
+    print(
+        f"DEBUG: Processing message: {[m.content if hasattr(m, 'content') else str(m) for m in messages]}")
+
+    # Get session history for context
+    history_context = history_manager.get_formatted_history_for_llm(session_id)
+    if history_context:
+        print(f"DEBUG: Adding history context: {history_context[:200]}...")
+        # Add history context to the first message
+        if messages and hasattr(messages[0], 'content'):
+            original_content = messages[0].content
+            messages[0].content = f"Previous conversation:\n{history_context}\n\nCurrent question: {original_content}"
+
     print("DEBUG: Invoking agent...")
     response = alfred.invoke({"messages": messages})
     print(f"DEBUG: Agent response: {response}")
-    
+
     final_response = next(
         (m for m in reversed(response['messages'])
          if isinstance(m, AIMessage) and not m.tool_calls),
@@ -179,14 +171,14 @@ def get_final_response(messages):
     )
 
     if final_response:
-        write_previous_history(final_response.content)
         print("Alfred's Response:", final_response.content)
         return final_response.content
     else:
         print("DEBUG: No final response found in agent output")
         # Return the last AI message even if it has tool calls
         last_ai_message = next(
-            (m for m in reversed(response['messages']) if isinstance(m, AIMessage)),
+            (m for m in reversed(response['messages'])
+             if isinstance(m, AIMessage)),
             None
         )
         if last_ai_message:
@@ -194,18 +186,31 @@ def get_final_response(messages):
         return "I apologize, but I couldn't generate a proper response. Please try again."
 
 # Pydantic models for request/response
+
+
 class ChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = None
+
 
 class ChatResponse(BaseModel):
     response: str
     status: str = "success"
+    session_id: Optional[str] = None
 
 # Routes
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """Serve the main HTML page."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    """Serve the main HTML page and create new session on page load."""
+    # Create a new session every time the page is loaded/reloaded
+    session_id = history_manager.start_new_session()
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "session_id": session_id
+    })
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(chat_request: ChatRequest):
@@ -213,28 +218,59 @@ async def chat_endpoint(chat_request: ChatRequest):
     if not chat_request.message or not chat_request.message.strip():
         raise HTTPException(status_code=400, detail="No message provided")
 
-    print(f"User Input: {chat_request.message}")
+    # Use session ID from request, or get current session as fallback
+    session_id = chat_request.session_id or history_manager.get_current_session()
+    
+    print(f"User Input: {chat_request.message} (Session: {session_id})")
+
+    # Add user message to history
+    history_manager.add_message(
+        session_id, "user", chat_request.message.strip())
 
     # Create human message
     human_message = HumanMessage(content=chat_request.message.strip())
 
     # Get response from the agent
-    response_content = get_final_response([human_message])
+    response_content = get_final_response([human_message], session_id)
+
+    # Add bot response to history
+    history_manager.add_message(session_id, "assistant", response_content)
 
     print(f"Bot Response: {response_content}")
 
     return ChatResponse(
         response=response_content,
-        status="success"
+        status="success",
+        session_id=session_id
     )
 
+
+@app.post("/new-session")
+async def create_new_session():
+    """Create a new chat session (manual restart)."""
+    session_id = history_manager.start_new_session()
+    return {"session_id": session_id, "status": "success", "message": "New conversation started"}
+
+@app.post("/clear-session")
+async def clear_session(request: dict):
+    """Clear a specific session's history."""
+    session_id = request.get("session_id")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID required")
+
+    history_manager.clear_session(session_id)
+    return {"status": "success", "message": "Session cleared"}
+
 # Error handlers
+
+
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
     return JSONResponse(
         status_code=404,
         content={"error": "Endpoint not found"}
     )
+
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
@@ -245,10 +281,12 @@ async def internal_error_handler(request: Request, exc):
 
 if __name__ == "__main__":
     import uvicorn
+    # Disable reload to prevent double session creation
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
         port=8080,
-        reload=True,
+        reload=False,  # Change to False to prevent double initialization
         log_level="info"
     )
+

@@ -12,7 +12,6 @@ venv/
 
 langchain.ipynb
 gemma_chat.ipynb
-User/*
 
 # Python
 __pycache__/
