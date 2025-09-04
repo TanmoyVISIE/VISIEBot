@@ -97,45 +97,50 @@ def search_visie_info_wrapper(input_str: str) -> str:
     return f"Found {len(results)} results for '{query}':\n\n" + "\n\n".join(formatted_results)
 
 @tool
-def visie_info_tool(query: str, variety_type: Optional[str] = None) -> str:
+def visie_info_tool(query: str) -> str:
     """
-    Get information about VISIE.tech projects, products, and services.
+    Search for information about VISIE technologies, services, and company details.
+    
+    This tool searches through VISIE's markdown-based knowledge base containing information about:
+    - Company overview and mission
+    - AI services and solutions
+    - Products like Documind, Kothok, Percept, VerifyID
+    - Research papers and AI insights
+    - Contact information
     
     Args:
-        query: The user's question about VISIE
-        variety_type: Optional specific category to search in
-    
+        query (str): The search query to find relevant information about VISIE
+        
     Returns:
-        Information about VISIE based on the query
+        str: Formatted search results with relevant information
     """
-    print(f"DEBUG: visie_info_tool called with query: {query}")
-    
-    # Import and use the actual retriever
-    from Core.retriver import search_visie_info
-    results = search_visie_info(query, variety_type, top_k=3)
-    
-    print(f"DEBUG: Retrieved {len(results)} results from database")
-    
-    if results:
-        response_parts = []
-        for i, doc in enumerate(results[:3]):  # Limit to top 3 results
-            content = doc.page_content if hasattr(doc, 'page_content') else str(doc)
-            source = doc.metadata.get('source_collection', 'VISIE Info') if hasattr(doc, 'metadata') else 'VISIE Info'
-            
-            # Clean and format the content
-            clean_content = content.strip()[:500]  # Limit to 500 chars
-            response_parts.append(f"**From {source}:**\n{clean_content}")
-            
-            print(f"DEBUG: Document {i+1} from {source}: {clean_content[:100]}...")
+    try:
+        # Use the updated search function (removed variety_type parameter)
+        results = search_visie_info(query, top_k=5)
         
-        final_response = "\n\n".join(response_parts)
-        print(f"DEBUG: Final response length: {len(final_response)}")
-        return final_response
-    else:
-        fallback_response = f"I searched for information about '{query}' in VISIE's knowledge base. While I couldn't find specific details in our database, I can tell you that VISIE is an innovative AI technology company offering:\n\n• **Documind**: AI-powered document processing and analysis\n• **Kothok**: Advanced conversational AI and chatbot solutions\n• **Percept**: Computer vision and image recognition technology\n• **VerifyID**: Identity verification and authentication systems\n• **AI Solutions for Innovation**: Custom AI solutions for businesses\n\nCould you please be more specific about what aspect of VISIE you'd like to know about?"
+        if not results:
+            return f"No information found for query: '{query}'. Please try a different search term or ask about VISIE's services, products, or company information."
         
-        print("DEBUG: No results found, returning fallback response")
-        return fallback_response
+        # Format results
+        formatted_results = []
+        for i, doc in enumerate(results, 1):
+            content = doc.page_content.strip()
+            
+            # Get metadata information
+            metadata = getattr(doc, 'metadata', {})
+            source_info = metadata.get('source_collection', 'visie_tech_markdown')
+            
+            # Truncate very long content
+            if len(content) > 500:
+                content = content[:500] + "..."
+            
+            formatted_results.append(f"{i}. {content}\n   Source: {source_info}")
+        
+        result_text = "\n\n".join(formatted_results)
+        return f"Found {len(results)} relevant results for '{query}':\n\n{result_text}"
+        
+    except Exception as e:
+        return f"Error searching VISIE information: {str(e)}"
 
 visie_info_tool = Tool(
     name="visie_info_tool",
