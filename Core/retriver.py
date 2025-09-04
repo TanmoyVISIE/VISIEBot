@@ -8,74 +8,59 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-def get_visie_retriever(collection_name: str, top_k: int = 3):
+def get_visie_retriever(top_k: int = 5):
     """
-    Creates a retriever for the specified Chroma collection of VisieInfo.
+    Creates a retriever from the markdown-based chroma_visie_tech collection.
 
     Args:
-        collection_name (str): Name of the collection to retrieve from.
-                              Should be one of: "About", "AI Insights", "Contact", "Documind", "Kothok", "Papers", "Percept", "Verifyid" or "AI solutions for Innovation".
-        top_k (int): Number of documents to retrieve. Defaults to 3.
+        top_k (int): Number of documents to retrieve. Defaults to 5.
         
     Returns:
-        A retriever object that can perform similarity search on the specified collection.
+        A retriever object that can perform similarity search on the visie_tech collection.
     """
-    # Validate collection name
-    valid_collections = ["About", "AI Insights", "Contact", "Documind", "Kothok", "Papers", "Percept", "Verifyid", "AI solutions for Innovation"]
-    if collection_name not in valid_collections:
-        raise ValueError(f"Invalid collection name: {collection_name}. Must be one of: {valid_collections}")
-    
     # Get Google API key from environment
     google_api_key = os.environ.get("GOOGLE_API_KEY")
     if not google_api_key:
         raise ValueError("GOOGLE_API_KEY environment variable not set")
     
-    # Initialize embeddings model with API key
+    # Initialize embeddings model with correct model name
     embeddings = GoogleGenerativeAIEmbeddings(
-        model="gemini-embedding-001",
+        model="models/embedding-001",
         google_api_key=google_api_key
     )
 
-    # Define possible database paths
-    possible_paths = [
-        f"DataLoader/chroma_db/Visieinfo - {collection_name}",
-        f"DataLoader/chroma_db/chroma_VisieInfo - {collection_name}",
-        f"DataLoader/chroma_db/chroma_{collection_name}",
-        f"DataLoader/chroma_db/{collection_name}",
-    ]
+    # Define the database path for markdown-based embeddings
+    db_path = "DataLoader/chroma_db/chroma_visie_tech"
     
-    # Find existing database path
-    db_path = None
-    for path in possible_paths:
-        if os.path.exists(path):
-            db_path = path
-            print(f"Found database at: {db_path}")
-            break
-    
-    if not db_path:
+    # Check if database path exists
+    if not os.path.exists(db_path):
         # List directory contents for debugging
         if os.path.exists("DataLoader/"):
             print("Contents of DataLoader/:")
             for item in os.listdir("DataLoader/"):
                 print(f"  {item}")
-                if os.path.isdir(f"DataLoader/{item}"):
-                    sub_items = os.listdir(f"DataLoader/{item}")
-                    for sub_item in sub_items[:5]:  # Show first 5 items
-                        print(f"    {sub_item}")
-                    if len(sub_items) > 5:
-                        print(f"    ... and {len(sub_items) - 5} more items")
+                if os.path.isdir(f"DataLoader/{item}") and item == "chroma_db":
+                    chroma_items = os.listdir(f"DataLoader/{item}")
+                    for chroma_item in chroma_items:
+                        print(f"    {chroma_item}")
         
-        raise FileNotFoundError(f"Database path for collection '{collection_name}' not found. Tried paths: {possible_paths}")
+        raise FileNotFoundError(f"Database path not found: {db_path}")
+    
+    # Create the collection name for markdown embeddings
+    collection_name = "markdown_001_visie_tech"
     
     vectorstore = Chroma(
-        collection_name=collection_name.replace(" ", "_"), 
+        collection_name=collection_name, 
         embedding_function=embeddings,
         persist_directory=db_path
     )
     
     # Get document count
-    count = vectorstore._collection.count()
-    print(f"Successfully connected to collection '{collection_name}' with {count} documents")
+    try:
+        count = vectorstore._collection.count()
+        print(f"Successfully connected to markdown collection '{collection_name}' with {count} documents")
+    except Exception as e:
+        print(f"Warning: Could not get document count: {e}")
     
     # Create retriever with similarity search
     retriever = vectorstore.as_retriever(
@@ -85,16 +70,13 @@ def get_visie_retriever(collection_name: str, top_k: int = 3):
     
     return retriever
 
-def search_visie_info(query: str, variety_type: Optional[str] = None, top_k: int = 3) -> List[Document]:
+def search_visie_info(query: str, top_k: int = 5) -> List[Document]:
     """
-    Searches for VisieInfo across all collections or a specific one.
+    Searches for VisieInfo in the markdown-based collection.
 
     Args:
         query (str): The search query
-        variety_type (str, optional): Specific VisieInfo type to search.
-                                     One of: "About", "AI Insights", "Contact", "Documind", "Kothok", "Papers", "Percept", "Verifyid" or "AI solutions for Innovation".
-                                     If None, searches all varieties.
-        top_k (int): Number of results to return per collection
+        top_k (int): Number of results to return
         
     Returns:
         List[Document]: List of relevant documents
@@ -102,28 +84,28 @@ def search_visie_info(query: str, variety_type: Optional[str] = None, top_k: int
     if not query.strip():
         raise ValueError("Query cannot be empty")
     
-    results = []
-    collections = ["About", "AI Insights", "Contact", "Documind", "Kothok", "Papers", "Percept", "Verifyid", "AI solutions for Innovation"]
-    
-    if variety_type:
-        # Search in specific collection
-        retriever = get_visie_retriever(variety_type, top_k)
+    try:
+        # Get the retriever for markdown-based embeddings
+        retriever = get_visie_retriever(top_k)
         results = retriever.get_relevant_documents(query)
-    else:
-        # Search in all collections
-        for collection in collections:
-            retriever = get_visie_retriever(collection, top_k)
-            collection_results = retriever.get_relevant_documents(query)
-            # Add collection info to metadata
-            for doc in collection_results:
-                if hasattr(doc, 'metadata'):
-                    doc.metadata['source_collection'] = collection
-                else:
-                    doc.metadata = {'source_collection': collection}
-            results.extend(collection_results)
-    
-    return results
-
+        
+        # Add source information to metadata
+        for doc in results:
+            if hasattr(doc, 'metadata'):
+                doc.metadata['source_collection'] = 'visie_tech_markdown'
+                doc.metadata['embedding_type'] = 'markdown'
+            else:
+                doc.metadata = {
+                    'source_collection': 'visie_tech_markdown',
+                    'embedding_type': 'markdown'
+                }
+        
+        print(f"Found {len(results)} relevant documents for query: '{query[:50]}...'")
+        return results
+        
+    except Exception as e:
+        print(f"Error searching visie info: {e}")
+        return []
 
 def get_employees_retriever(top_k: int = 3):
     """
