@@ -3,6 +3,7 @@
 
 html_data/
 pdf_data/
+markdown_data/
 
 chroma_db/
 vector_stores/
